@@ -1,17 +1,6 @@
-# Health Risk Prediction Dashboard with Smart Alerts
+# Pulse — Health Risk Dashboard
 
-Streamlit dashboard that classifies health risk with logistic regression, stores entries locally, and raises alerts for high-risk cases.
-
-This is the public demo from [Satya Narayana Raju Sagi](https://www.linkedin.com/in/raju-49047b258)'s résumé. Production storage can swap to MongoDB Atlas via `MONGO_URI`.
-
-## Features
-
-- Logistic regression risk scores (target: ~87% accuracy / ~92% precision on the bundled test split)
-- Real-time form with smart alerts
-- SQLite persistence (MongoDB Atlas compatible interface in `storage.py`)
-- Feature preprocessing before scoring
-
-## Run
+Interactive Streamlit app trained on the combined [UCI Heart Disease](https://doi.org/10.24432/C52P4X) dataset (1,190 patients).
 
 ```bash
 python3 -m venv .venv
@@ -21,4 +10,4 @@ python train.py
 streamlit run app.py
 ```
 
-Open http://localhost:8501
+Tabs: live risk gauge, cohort explorer, model coefficients, saved alerts.

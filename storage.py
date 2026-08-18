@@ -1,8 +1,8 @@
-"""Local persistence. Set MONGO_URI to use MongoDB Atlas instead of SQLite."""
+"""Local persistence for scored assessments."""
 
 from __future__ import annotations
 
-import os
+import json
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,60 +19,55 @@ def _connect() -> sqlite3.Connection:
         CREATE TABLE IF NOT EXISTS assessments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             created_at TEXT NOT NULL,
-            age INTEGER,
-            bmi REAL,
-            systolic_bp INTEGER,
-            cholesterol INTEGER,
-            glucose INTEGER,
-            smoking INTEGER,
-            exercise_hours REAL,
-            family_history INTEGER,
+            payload TEXT NOT NULL,
             risk_label TEXT,
-            probability REAL
+            probability REAL,
+            username TEXT
         )
         """
     )
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(assessments)").fetchall()}
+    if "username" not in cols:
+        conn.execute("ALTER TABLE assessments ADD COLUMN username TEXT")
     return conn
 
 
-def save_assessment(payload: dict[str, Any]) -> None:
-    uri = os.getenv("MONGO_URI")
-    if uri:
-        try:
-            from pymongo import MongoClient
-
-            client = MongoClient(uri)
-            client.get_default_database()["assessments"].insert_one(payload)
-            return
-        except Exception:
-            pass
+def save_assessment(
+    payload: dict[str, Any], risk_label: str, probability: float, username: str | None = None
+) -> None:
     conn = _connect()
-    cols = [
-        "created_at",
-        "age",
-        "bmi",
-        "systolic_bp",
-        "cholesterol",
-        "glucose",
-        "smoking",
-        "exercise_hours",
-        "family_history",
-        "risk_label",
-        "probability",
-    ]
-    payload.setdefault("created_at", datetime.now(timezone.utc).isoformat())
     conn.execute(
-        f"INSERT INTO assessments ({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)})",
-        [payload.get(c) for c in cols],
+        "INSERT INTO assessments (created_at, payload, risk_label, probability, username) VALUES (?,?,?,?,?)",
+        (
+            datetime.now(timezone.utc).isoformat(),
+            json.dumps(payload),
+            risk_label,
+            probability,
+            username,
+        ),
     )
     conn.commit()
     conn.close()
 
 
-def recent(limit: int = 20) -> list[dict[str, Any]]:
+def recent(limit: int = 25, username: str | None = None) -> list[dict[str, Any]]:
     conn = _connect()
-    rows = conn.execute(
-        "SELECT * FROM assessments ORDER BY id DESC LIMIT ?", (limit,)
-    ).fetchall()
+    if username:
+        rows = conn.execute(
+            "SELECT * FROM assessments WHERE username = ? ORDER BY id DESC LIMIT ?",
+            (username, limit),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM assessments ORDER BY id DESC LIMIT ?", (limit,)
+        ).fetchall()
     conn.close()
-    return [dict(r) for r in rows]
+    out = []
+    for row in rows:
+        item = dict(row)
+        try:
+            item.update(json.loads(item.get("payload") or "{}"))
+        except json.JSONDecodeError:
+            pass
+        out.append(item)
+    return out
